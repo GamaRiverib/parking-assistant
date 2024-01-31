@@ -27,7 +27,10 @@ void turnOnPixels();
 
 const uint8_t ASSIST_DIST_CM = 135;
 const uint8_t ALERT_DIST_CM = 5;
-const int STOP_TIME = 250;
+const long STOP_TIME = 1 * 60000;
+
+const uint8_t NO_MOVE_TOLERANCE = 3;
+const uint8_t PIXELS_MIDDLE = NUM_PIXELS / 2;
 
 const uint8_t ZONE_DIST_CM = (ASSIST_DIST_CM - ALERT_DIST_CM) / 3;
 const uint8_t LOW_SPEED = 50;
@@ -82,21 +85,23 @@ void loop()
 
   uint8_t new_status = getStatus(distanceCm);
 
-  if (new_status == STOP)
+  if (abs((prevDistanceCm) - int(distanceCm)) < NO_MOVE_TOLERANCE)
   {
-    if (int(prevDistanceCm) == int(distanceCm))
+    if (stop_count * (25 + speed * PIXELS_MIDDLE) < STOP_TIME)
     {
-      if (stop_count < STOP_TIME) {
-        stop_count++;
-      } else {
-        new_status = OFF;
-        speed = 0;
-      }
-    } else {
-      stop_count = 0;
+      stop_count++;
+    }
+    else
+    {
+      new_status = OFF;
+      speed = 0;
     }
   }
-  
+  else
+  {
+    stop_count = 0;
+  }
+
   prevDistanceCm = distanceCm;
   status = new_status;
 
@@ -106,7 +111,26 @@ void loop()
   Serial.print("Distance: ");
   Serial.print(distanceCm);
   Serial.print(" cm.\tStatus: ");
-  Serial.println(status);
+  switch (status)
+  {
+  case 0:
+    Serial.println("OFF");
+    break;
+  case 1:
+    Serial.println("SAFE");
+    break;
+  case 2:
+    Serial.println("WARN");
+    break;
+  case 3:
+    Serial.println("DANGER");
+    break;
+  case 4:
+    Serial.println("STOP");
+    break;
+  default:
+    break;
+  }
 
   turnOff();
 
@@ -169,22 +193,29 @@ void turnOnPixels()
   red = 0;
   green = 0;
 
-  if (status == SAFE) {
+  if (status == SAFE)
+  {
     green = 255;
-  } else if (status == WARN) {
+  }
+  else if (status == WARN)
+  {
     red = 155;
     green = 155;
-  } else if (status == DANGER || status == STOP) {
+  }
+  else if (status == DANGER || status == STOP)
+  {
     red = 255;
   }
 
-  if (status != OFF && status != STOP) {
+  if (status != OFF && status != STOP)
+  {
     pixels.clear();
   }
 
-  for (int i = 0; i < NUM_PIXELS; i++)
+  for (int i = 0; i < PIXELS_MIDDLE; i++)
   {
     pixels.setPixelColor(i, pixels.Color(red, green, 0));
+    pixels.setPixelColor(NUM_PIXELS - i - 1, pixels.Color(red, green, 0));
     pixels.show();
     delay(speed);
   }
