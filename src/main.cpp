@@ -8,7 +8,7 @@
 // put function declarations here:
 void turnOn();
 void turnOff();
-void sendPulse();
+void sendPulse(uint8_t trigPin);
 
 uint8_t getStatus(float distance);
 
@@ -16,8 +16,15 @@ void turnOnPixels();
 
 #define LED_PIN 2
 
-#define TRIG_PIN 12
-#define ECHO_PIN 14
+#define TRIG_1_PIN 5
+#define ECHO_1_PIN 4
+
+#define DOUBLE_SENSOR 
+
+#ifdef DOUBLE_SENSOR
+  #define TRIG_2_PIN 12
+  #define ECHO_2_PIN 14
+#endif
 
 #define PIXELS_PIN 13
 #define NUM_PIXELS 30
@@ -40,9 +47,13 @@ const uint8_t WARN = 2;
 const uint8_t DANGER = 3;
 const uint8_t STOP = 4;
 
-long duration;
-float prevDistanceCm;
-float distanceCm;
+long duration_1;
+float prev_distance;
+float distance_1;
+#ifdef DOUBLE_SENSOR
+  long duration_2;
+  float distance_2;
+#endif
 
 uint8_t status = OFF;
 uint8_t red = 0;
@@ -56,9 +67,16 @@ void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(115200);
+  Serial.println();
   pinMode(LED_PIN, OUTPUT);
-  pinMode(TRIG_PIN, OUTPUT); // Sets the TRIG_PIN as an Output
-  pinMode(ECHO_PIN, INPUT);  // Sets the ECHO_PIN as an Input
+  pinMode(TRIG_1_PIN, OUTPUT); // Sets the TRIG_1_PIN as an Output
+  pinMode(ECHO_1_PIN, INPUT);  // Sets the ECHO_1_PIN as an Input
+
+  #ifdef DOUBLE_SENSOR
+    Serial.println("Using double sensor");
+    pinMode(TRIG_2_PIN, OUTPUT); // Sets the TRIG_2_PIN as an Output
+    pinMode(ECHO_2_PIN, INPUT);  // Sets the ECHO_2_PIN as an Input
+  #endif
 
   // These lines are specifically to support the Adafruit Trinket 5V 16 MHz.
   // Any other board, you can remove this part (but no harm leaving it):
@@ -66,7 +84,8 @@ void setup()
   clock_prescale_set(clock_div_1);
 #endif
   // END of Trinket-specific code.
-
+  Serial.print("Pixels: ");
+  Serial.println(NUM_PIXELS);
   pixels.begin();
 }
 
@@ -76,16 +95,31 @@ void loop()
   // put your main code here, to run repeatedly:
   turnOn();
 
-  sendPulse();
-  // Reads the ECHO_PIN Pin, returns the sound wave travel time in microseconds
-  duration = pulseIn(ECHO_PIN, HIGH);
+  sendPulse(TRIG_1_PIN);
 
+  // Reads the ECHO_1_PIN Pin, returns the sound wave travel time in microseconds
+  duration_1 = pulseIn(ECHO_1_PIN, HIGH);
   // Calculate the distance
-  distanceCm = duration * SOUND_VELOCITY / 2;
+  distance_1 = duration_1 * SOUND_VELOCITY / 2;
 
-  uint8_t new_status = getStatus(distanceCm);
+  float distance = distance_1;
 
-  if (abs((prevDistanceCm) - int(distanceCm)) < NO_MOVE_TOLERANCE)
+  delay(10);
+
+  #ifdef DOUBLE_SENSOR
+    sendPulse(TRIG_2_PIN);
+    // Reads the ECHO_2_PIN Pin, returns the sound wave travel time in microseconds
+    duration_2 = pulseIn(ECHO_2_PIN, HIGH);
+    // Calculate the distance
+    distance_2 = duration_2 * SOUND_VELOCITY / 2;
+    if (distance_2 < distance_1) {
+      distance = distance_2;
+    }
+  #endif
+
+  uint8_t new_status = getStatus(distance);
+
+  if (abs((prev_distance) - int(distance)) < NO_MOVE_TOLERANCE)
   {
     if (stop_count * (25 + speed * PIXELS_MIDDLE) < STOP_TIME)
     {
@@ -102,14 +136,18 @@ void loop()
     stop_count = 0;
   }
 
-  prevDistanceCm = distanceCm;
+  prev_distance = distance;
   status = new_status;
 
   turnOnPixels();
 
   // Prints the distance on the Serial Monitor
   Serial.print("Distance: ");
-  Serial.print(distanceCm);
+  Serial.print(distance_1);
+  #ifdef DOUBLE_SENSOR
+    Serial.print(", ");
+    Serial.print(distance_2);
+  #endif
   Serial.print(" cm.\tStatus: ");
   switch (status)
   {
@@ -148,16 +186,19 @@ void turnOff()
   digitalWrite(LED_PIN, LOW);
 }
 
-void sendPulse()
+void sendPulse(uint8_t trigPin)
 {
-  // Clears the TRIG_PIN pin
-  digitalWrite(TRIG_PIN, LOW);
+  // Clears the TRIG pin
+  digitalWrite(trigPin, LOW);
+
   delayMicroseconds(2);
 
-  // Sets the TRIG_PIN pin on HIGH state for 10 micro seconds
-  digitalWrite(TRIG_PIN, HIGH);
+  // Sets the TRIG pin on HIGH state for 10 micro seconds
+  digitalWrite(trigPin, HIGH);
+
   delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
+
+  digitalWrite(trigPin, LOW);
 }
 
 uint8_t getStatus(float distance)
